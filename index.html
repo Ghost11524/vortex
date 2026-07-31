@@ -78,6 +78,7 @@
             <button onclick="logChaserSpotterReport()" style="width:100%; background:#38bdf8; color:#0f172a; font-weight:bold; border:none; padding:10px; border-radius:6px; cursor:pointer; font-family:monospace; font-size:0.75rem; text-transform:uppercase;">LOG FIELD INTERCEPT REPORT</button>
         </div>
     </div>
+    <div id="radar-sweep"></div>
     <div id="map"></div>
     <script>
         const telemetryDetails = {
@@ -86,4 +87,3 @@
             helicity: { title: "Storm-Relative Helicity (SRH)", body: "Low-level directional wind shear calculations indicate 140 m²/s² of absolute directional spin, assisting low-level rotation components." },
             warnings: { title: "Active NWS Warning Feeds", body: "Polling live federal telemetry arrays. Active polygon warning vectors will populate directly onto the satellite display mapping grid." }
         };
-        const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([46.8772, -96.7898], 9);
