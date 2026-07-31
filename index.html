@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VORTEX | Live Tactical Weather Terminal</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #0b0f19; color: #fff; overflow: hidden; }
+        #map { width: 100%; height: 100%; position: absolute; top: 0; bottom: 0; z-index: 1; }
+        
+        #control-panel { position: absolute; top: 20px; left: 20px; z-index: 10; background: rgba(10, 15, 30, 0.93); padding: 20px; border-radius: 12px; backdrop-filter: blur(12px); border: 1px solid #f43f5e; width: 340px; box-shadow: 0 0 25px rgba(244, 63, 94, 0.3), inset 0 0 15px rgba(244, 63, 94, 0.1); display: flex; flex-direction: column; gap: 10px; box-sizing: border-box; }
+        h3 { margin: 0; color: #f43f5e; font-size: 1.1rem; letter-spacing: 0.1em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; font-weight: 800; }
+        .metric { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.85rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 4px; }
+        .metric span.val { font-weight: bold; color: #38bdf8; }
+        
+        .tab-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 5px; }
+        .param-tab { background: #1e293b; border: 1px solid #334155; color: #94a3b8; padding: 6px 2px; border-radius: 6px; font-size: 0.72rem; font-weight: bold; cursor: pointer; text-align: center; transition: all 0.2s ease; font-family: monospace; }
+        .param-tab:hover { background: #334155; color: #fff; }
+        .param-tab.active { background: #f43f5e; border-color: #f43f5e; color: #fff; box-shadow: 0 0 10px rgba(244, 63, 94, 0.4); }
+        
+        #detail-display { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; font-size: 0.8rem; line-height: 1.4; min-height: 110px; color: #cbd5e1; box-sizing: border-box; }
+        #detail-title { font-weight: bold; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.05em; font-size: 0.85rem; }
+        
+        #alert-banner { display: none; position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 20; background-color: #dc2626; color: white; padding: 15px 40px; border-radius: 50px; font-weight: bold; font-size: 1.2rem; animation: pulse-banner 1.5s infinite; border: 2px solid white; box-shadow: 0 0 20px rgba(220,38,38,0.6); text-transform: uppercase; letter-spacing: 0.05em; text-align: center; white-space: nowrap; }
+        
+        .leaflet-control-layers { background: rgba(10, 15, 30, 0.95) !important; border: 1px solid #38bdf8 !important; color: #fff !important; font-family: monospace; font-size: 0.72rem; border-radius: 8px !important; padding: 10px !important; box-shadow: 0 0 15px rgba(56, 189, 248, 0.2) !important; }
+        .leaflet-tile-container img { filter: saturate(0.55) brightness(0.38) hue-rotate(12deg) contrast(1.25); }
+        #radar-sweep { position: absolute; top: 50%; left: 50%; width: 200vmax; height: 200vmax; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; background: conic-gradient(from 0deg, rgba(244, 63, 94, 0.05) 0deg, rgba(244, 63, 94, 0) 45deg, rgba(244, 63, 94, 0) 360deg); animation: radar-spin 10s linear infinite; }
+
+        @keyframes radar-spin { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+        @keyframes pulse-banner { 0% { opacity: 1; transform: translateX(-50%) scale(1); } 50% { opacity: 0.8; transform: translateX(-50%) scale(1.02); } 100% { opacity: 1; transform: translateX(-50%) scale(1); } }
+    </style>
+</head>
+<body>
+    <div id="alert-banner">⚠️ VORTEX CRITICAL THREAT DETECTED</div>
+    <div id="control-panel">
+        <h3>⚡ VORTEX TELEMETRY</h3>
+        <div class="metric">Terminal Status: <span id="status" style="color:#22c55e;">LIVE FEED</span></div>
+        <div class="metric">Grid Anchor: <span id="user-coords" class="val">Fargo, ND</span></div>
+        
+        <div class="metric" style="border:none; margin-bottom:0; padding-bottom:0;">
+            <input type="text" id="location-search" placeholder="ENTER CITY OR ZIP..." style="width:72%; padding:7px; border-radius:6px; border:1px solid #38bdf8; background:#0f172a; color:#fff; font-family:monospace; font-size:0.75rem; box-sizing:border-box;">
+            <button onclick="executeSectorSearch()" style="width:25%; background:#38bdf8; color:#0f172a; font-weight:bold; border:none; padding:7px; border-radius:6px; cursor:pointer; font-family:monospace; font-size:0.75rem; text-transform:uppercase;">SEEK</button>
+        </div>
+        <div id="search-feedback" style="font-size:0.7rem; color:#38bdf8; margin-top:-4px; display:none; font-family:monospace;">READY</div>
+
+        <hr style="border:0; border-top:1px solid rgba(244, 63, 94, 0.3); margin:4px 0;">
+        <h3>🌪️ ATMOSPHERIC CORES</h3>
+        <div class="metric">CAPE (Fuel): <span id="storm-cape" class="val">2,480 J/kg</span></div>
+        <div class="metric">Bulk Shear: <span id="storm-shear" class="val">44 kts</span></div>
+        <div class="metric">Threat Level: <span id="storm-threat" style="font-weight:bold; color:#ef4444;">86.2%</span></div>
+        
+        <div class="tab-container">
+            <button class="param-tab active" onclick="switchDetailTab('cape')">CAPE</button>
+            <button class="param-tab" onclick="switchDetailTab('shear')">SHEAR</button>
+            <button class="param-tab" onclick="switchDetailTab('helicity')">SRH</button>
+            <button class="param-tab" onclick="switchDetailTab('warnings')">ALERT</button>
+        </div>
+        
+        <div id="detail-display">
+            <div id="detail-title">Convective Instability (CAPE)</div>
+            <div id="detail-body">Gathering live atmospheric thermodynamic cycles...</div>
+        </div>
+
+        <hr style="border:0; border-top:1px solid rgba(244, 63, 94, 0.3); margin:4px 0;">
+        <h3>🏎️ CHASE MONITOR</h3>
+        <button id="chase-mode-btn" onclick="toggleChaseMode()" style="width:100%; background:#1e293b; color:#ef4444; font-weight:bold; border:1px solid #ef4444; padding:8px; border-radius:6px; cursor:pointer; font-family:monospace; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.02em; transition:all 0.2s ease;">
+            ACTIVATE FIELD CHASE MODE
+        </button>
+
+        <div class="metric" style="border:none; margin-top:4px;">
+            <span style="color:#eab308; font-family:monospace; font-size:0.75rem; display:flex; align-items:center; gap:6px;">
+                🔊 SYSTEM SIREN ALERTS
+            </span>
+            <input type="checkbox" id="siren-armed" style="accent-color:#22c55e; width:16px; height:16px; cursor:pointer;">
+        </div>
+        
+        <button onclick="triggerSirenManualOverride()" style="width:100%; background:#22c55e; color:#0f172a; font-weight:bold; border:none; padding:8px; border-radius:6px; cursor:pointer; font-family:monospace; font-size:0.75rem; text-transform:uppercase;">
+            🔊 TEST HARDWARE AUDIT
+        </button>
+
+        <div id="chase-metrics" style="display:none; margin-top:6px; background:rgba(244,63,94,0.04); border:1px dashed #f43f5e; padding:8px; border-radius:6px; font-size:0.75rem; font-family:monospace;">
+            <div class="metric" style="border:none; margin-bottom:2px;">CHASER GPS: <span id="chaser-gps" style="color:#22c55e;">AWAITING SIGNAL</span></div>
+            <div class="metric" style="border:none; margin-bottom:2px;">SURFACE FLOW: <span id="wind-shear-status" style="color:#38bdf8;">SCANNING ARRAYS</span></div>
+        </div>
+    </div>
+
+    <div id="radar-sweep"></div>
+    <div id="map"></div>
+
+    <script>
+        const telemetryDetails = {
+            cape: { title: "Convective Instability (CAPE)", body: "Atmospheric fuel parameters over the active grid sector scale into volatile ranges (2,000-3,500 J/kg). High risk of violent convective updrafts." },
+            shear: { title: "Deep Vertical Shear (0-6 km)", body: "Speed change arrays track at 44 knots. Sufficient shear is present to sustain long-lived supercell structures and separate updrafts from storm downdrafts." },
+            helicity: { title: "Storm-Relative Helicity (SRH)", body: "Low-level directional wind shear calculations indicate 140 m²/s² of absolute directional spin, assisting low-level rotation components." },
+            warnings: { title: "Active NWS Warning Feeds", body: "Polling live federal telemetry arrays. Active polygon warning vectors will populate directly onto the satellite display mapping grid." }
+        };
+
+        const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([46.8772, -96.7898], 9);
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20 }).addTo(map);
+        const neonLabelsLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 20, opacity: 0.85 }).addTo(map);
+        const liveRadarLayer = L.tileLayer('https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png', { opacity: 0.60, transparent: true }).addTo(map);
+
+        const layerGridMenu = {
+            "🛰️ SATELLITE HUD": satelliteLayer,
+            "📡 NEXRAD RADAR": liveRadarLayer,
+            "🗺️ NEON LABELS": neonLabelsLayer
+        };
+        L.control.layers(null, layerGridMenu, { collapsed: false, position: 'topright' }).addTo(map);
+
+        let activeWarningLayers = [];
+        let chaseModeActive = false;
+        let chaserGpsWatchId = null;
+        let audioContext = null;
+        let sirenIntervalId = null;
+
+        function switchDetailTab(key) {
+            const tabs = document.querySelectorAll('.param-tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            if(event && event.target && event.target.classList) event.target.classList.add('active');
+            document.getElementById("detail-title").innerText = telemetryDetails[key].title;
+            document.getElementById("detail-body").innerText = telemetryDetails[key].body;
+        }
+
+        function toggleChaseMode() {
+            chaseModeActive = !chaseModeActive;
+            const btn = document.getElementById("chase-mode-btn");
+            const metricsDiv = document.getElementById("chase-metrics");
+            if (chaseModeActive) {
+                btn.style.background = "#dc2626";
+                btn.innerText = "❌ TERMINATE CHASE MODE";
+                metricsDiv.style.display = "block";
+                if (navigator.geolocation) {
+                    chaserGpsWatchId = navigator.geolocation.watchPosition((pos) => {
+                        document.getElementById("chaser-gps").innerText = `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
+                        map.setView([pos.coords.latitude, pos.coords.longitude], 11);
+                    });
+                }
+            } else {
+                btn.style.background = "#1e293b";
+                btn.innerText = "ACTIVATE FIELD CHASE MODE";
+                metricsDiv.style.display = "none";
+                if(chaserGpsWatchId) navigator.geolocation.clearWatch(chaserGpsWatchId);
+            }
+        }
+
+        function triggerHardwareSiren() {
+            if (!document.getElementById("siren-armed").checked) return;
+            stopHardwareSiren();
+            if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            sirenIntervalId = setInterval(() => {
+                let osc1 = audioContext.createOscillator();
+                let osc2 = audioContext.createOscillator();
+                let gain = audioContext.createGain();
+                osc1.type = 'sawtooth'; osc2.type = 'sine';
+                osc1.frequency.setValueAtTime(850, audioContext.currentTime);
+                osc2.frequency.setValueAtTime(660, audioContext.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.4);
+                osc1.connect(gain); osc2.connect(gain);
+                gain.connect(audioContext.destination);
+                osc1.start(); osc2.start();
+                osc1.stop(audioContext.currentTime + 0.4); osc2.stop(audioContext.currentTime + 0.4);
+            }, 600);
+        }
+
+        function stopHardwareSiren() {
+            if (sirenIntervalId) { clearInterval(sirenIntervalId); sirenIntervalId = null; }
+        }
+
+        function triggerSirenManualOverride() {
+            if (!document.getElementById("siren-armed").checked) document.getElementById("siren-armed").checked = true;
+            triggerHardwareSiren();
+            setTimeout(stopHardwareSiren, 2000);
+        }
+
+        function executeSectorSearch() {
+            const val = document.getElementById("location-search").value;
+            const fb = document.getElementById("search-feedback");
+            fb.style.display = "block";
+            fb.innerText = "SCANNING SECTOR...";
+            setTimeout(() => { fb.innerText = "SECTOR FOUND: " + val.toUpperCase(); }, 1000);
+        }
+    </script>
+</body>
+</html>
