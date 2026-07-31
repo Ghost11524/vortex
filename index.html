@@ -4,9 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VORTEX | Live Tactical Weather Terminal</title>
-    <!-- Stable Leaflet mapping dependencies bypassing sandboxed iframe restrictions -->
-    <link rel="stylesheet" href="https://unpkg.com" />
-    <script src="https://unpkg.com"></script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0b0f19; color: #fff; overflow: hidden; }
         
@@ -14,7 +15,8 @@
         #map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; bottom: 0; right: 0; z-index: 1; }
         
         /* Forces the control window to float cleanly above the full-screen map background */
-        #control-panel { position: absolute; top: 20px; left: 20px; z-index: 10; background: rgba(10, 15, 30, 0.93); padding: 20px; border-radius: 12px; backdrop-filter: blur(12px); border: 1px solid #f43f5e; width: 340px; max-height: calc(100vh - 40px); overflow-y: auto; box-shadow: 0 0 25px rgba(244, 63, 94, 0.3), inset 0 0 15px rgba(244, 63, 94, 0.1); display: flex; flex-direction: column; gap: 10px; box-sizing: border-box; }
+        #control-panel { position: absolute; top: 20px; left: 20px; z-index: 10; background: rgba(10, 15, 30, 0.93); padding: 20px; border-radius: 12px; backdrop-filter: blur(12px); border: 1px solid #f43f5e; width: 340px; max-height: calc(100vh - 40px); overflow-y: auto; box-shadow: 0 0 25px rgba(244, 63, 94, 0.3), inset 0 0 15px rgba(244, 63, 94, 0.1); display: flex; flex-direction: column; gap: 10px; box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease; }
+        .hud-hidden { transform: translateX(-150%); opacity: 0; pointer-events: none; }
         
         /* Custom scrollbar track styling to maintain the futuristic terminal vibe */
         #control-panel::-webkit-scrollbar { width: 4px; }
@@ -31,21 +33,18 @@
         .param-tab:hover { background: #334155; color: #fff; }
         .param-tab.active { background: #f43f5e; border-color: #f43f5e; color: #fff; box-shadow: 0 0 10px rgba(244, 63, 94, 0.4); }
         
-        /* Interactive Data Display Output Box */
         #detail-display { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; font-size: 0.8rem; line-height: 1.4; min-height: 110px; color: #cbd5e1; box-sizing: border-box; }
         #detail-title { font-weight: bold; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.05em; font-size: 0.85rem; }
         
-        /* Critical Threat Notification Ribbon */
         #alert-banner { display: none; position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 20; background-color: #dc2626; color: white; padding: 15px 40px; border-radius: 50px; font-weight: bold; font-size: 1.2rem; animation: pulse-banner 1.5s infinite; border: 2px solid white; box-shadow: 0 0 20px rgba(220,38,38,0.6); text-transform: uppercase; letter-spacing: 0.05em; text-align: center; white-space: nowrap; }
         
-        /* Customize Native Leaflet Layer Widgets to match Cyberpunk style */
+        /* Leaflet Overrides */
         .leaflet-control-layers { background: rgba(10, 15, 30, 0.95) !important; border: 1px solid #38bdf8 !important; color: #fff !important; font-family: monospace; font-size: 0.72rem; border-radius: 8px !important; padding: 10px !important; box-shadow: 0 0 15px rgba(56, 189, 248, 0.2) !important; }
         .leaflet-control-layers-selector { accent-color: #38bdf8; margin-right: 6px; }
 
-        /* FIXED: Vivid Daylight Satellite Correction Matrix with zero visibility dimming filters */
+        /* Vivid Daylight Satellite Correction Matrix */
         .leaflet-tile-container img { filter: saturate(1.1) brightness(0.95) contrast(1.1); }
 
-        /* Animated Radar Sweep Overlay and Pulser Rings */
         #radar-sweep { position: absolute; top: 50%; left: 50%; width: 200vmax; height: 200vmax; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; background: conic-gradient(from 0deg, rgba(244, 63, 94, 0.05) 0deg, rgba(244, 63, 94, 0) 45deg, rgba(244, 63, 94, 0) 360deg); animation: radar-spin 10s linear infinite; }
 
         @keyframes radar-spin { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
@@ -56,12 +55,15 @@
 
     <div id="alert-banner">⚠️ VORTEX CRITICAL THREAT DETECTED</div>
 
+    <button id="visor-toggle-btn" onclick="toggleHUD()" style="position: absolute; bottom: 25px; left: 20px; z-index: 999; background: rgba(10, 15, 30, 0.85); color: #38bdf8; border: 1px solid #38bdf8; padding: 10px 16px; border-radius: 8px; font-family: monospace; font-size: 0.8rem; font-weight: bold; cursor: pointer; backdrop-filter: blur(8px); box-shadow: 0 0 15px rgba(56, 189, 248, 0.2); text-transform: uppercase; transition: all 0.2s ease;">
+        👁️ HIDE VISOR
+    </button>
+
     <div id="control-panel">
         <h3>⚡ VORTEX TELEMETRY</h3>
         <div class="metric">Terminal Status: <span id="status" style="color:#22c55e;">LIVE FEED</span></div>
         <div class="metric">Grid Anchor: <span id="user-coords" class="val">Fargo, ND</span></div>
         
-        <!-- Sector Address/Zip Search Engine -->
         <div class="metric" style="border:none; margin-bottom:0; padding-bottom:0;">
             <input type="text" id="location-search" placeholder="ENTER CITY OR ZIP..." style="width:72%; padding:7px; border-radius:6px; border:1px solid #38bdf8; background:#0f172a; color:#fff; font-family:monospace; font-size:0.75rem; box-sizing:border-box;">
             <button onclick="executeSectorSearch()" style="width:25%; background:#38bdf8; color:#0f172a; font-weight:bold; border:none; padding:7px; border-radius:6px; cursor:pointer; font-family:monospace; font-size:0.75rem; text-transform:uppercase;">SEEK</button>
@@ -74,7 +76,6 @@
         <div class="metric">Bulk Shear: <span id="storm-shear" class="val">44 kts</span></div>
         <div class="metric">Threat Level: <span id="storm-threat" style="font-weight:bold; color:#ef4444;">86.2%</span></div>
         
-        <!-- Interactive Analysis HUD Tabs -->
         <div class="tab-container">
             <button class="param-tab active" onclick="switchDetailTab('cape')">CAPE</button>
             <button class="param-tab" onclick="switchDetailTab('shear')">SHEAR</button>
@@ -82,20 +83,17 @@
             <button class="param-tab" onclick="switchDetailTab('warnings')">ALERT</button>
         </div>
         
-        <!-- Deep Dive Output Window -->
         <div id="detail-display">
             <div id="detail-title">Convective Instability (CAPE)</div>
             <div id="detail-body">Gathering live atmospheric thermodynamic cycles...</div>
         </div>
 
-        <!-- Field Chase Mode Controls -->
         <hr style="border:0; border-top:1px solid rgba(244, 63, 94, 0.3); margin:4px 0;">
         <h3>🏎️ CHASE MONITOR</h3>
         <button id="chase-mode-btn" onclick="toggleChaseMode()" style="width:100%; background:#1e293b; color:#ef4444; font-weight:bold; border:1px solid #ef4444; padding:8px; border-radius:6px; cursor:pointer; font-family:monospace; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.02em; transition:all 0.2s ease;">
             ACTIVATE FIELD CHASE MODE
         </button>
         
-        <!-- Audio Alarm Siren Armed Toggle Switch Component -->
         <div class="metric" style="border:none; margin-top:4px;">
             <span style="color:#eab308; font-family:monospace; font-size:0.75rem; display:flex; align-items:center; gap:6px;">
                 🔊 SYSTEM SIREN ALERTS
@@ -103,7 +101,6 @@
             <input type="checkbox" id="siren-armed" style="accent-color:#22c55e; width:16px; height:16px; cursor:pointer;">
         </div>
         
-        <!-- Live Manual Trigger Test Mode Button -->
         <button onclick="triggerSirenManualOverride()" style="width:100%; background:#22c55e; color:#0f172a; font-weight:bold; border:none; padding:8px; border-radius:6px; cursor:pointer; font-family:monospace; font-size:0.75rem; text-transform:uppercase;">
             🔊 TEST HARDWARE AUDIT
         </button>
@@ -112,15 +109,29 @@
             <div class="metric" style="border:none; margin-bottom:2px;">CHASER GPS: <span id="chaser-gps" style="color:#22c55e;">AWAITING SIGNAL</span></div>
             <div class="metric" style="border:none; margin-bottom:2px;">SURFACE FLOW: <span id="wind-shear-status" style="color:#38bdf8;">SCANNING ARRAYS</span></div>
         </div>
+    </div>
 
-        <!-- Spotter Logging Intercept Form Section -->
-        <hr style="border:0; border-top:1px solid rgba(244, 63, 94, 0.3); margin:4px 0;">
-        <h3>📡 SPOTTER INTERCEPT LOG</h3>
-        <div style="display:flex; flex-direction:column; gap:6px;">
-            <select id="spotter-hazard" style="width:100%; padding:8px; border-radius:6px; border:1px solid #38bdf8; background:#0f172a; color:#fff; font-family:monospace; font-size:0.75rem;">
-```html
+    <div id="radar-sweep"></div>
+    <div id="map"></div>
+
     <script>
-        // Content definitions for internal parameter tabs
+        // 1. GLOBAL STATE & UI CONTROLS
+        let hudActive = true;
+
+        function toggleHUD() {
+            hudActive = !hudActive;
+            const panel = document.getElementById("control-panel");
+            const btn = document.getElementById("visor-toggle-btn");
+            
+            if (hudActive) {
+                panel.classList.remove("hud-hidden");
+                if(btn) btn.innerText = "👁️ HIDE VISOR";
+            } else {
+                panel.classList.add("hud-hidden");
+                if(btn) btn.innerText = "👁️ SHOW VISOR";
+            }
+        }
+
         const telemetryDetails = {
             cape: { title: "Convective Instability (CAPE)", body: "Atmospheric fuel parameters over the active grid sector scale into volatile ranges (2,000-3,500 J/kg). High risk of violent convective updrafts." },
             shear: { title: "Deep Vertical Shear (0-6 km)", body: "Speed change arrays track at 44 knots. Sufficient shear is present to sustain long-lived supercell structures and separate updrafts from storm downdrafts." },
@@ -128,13 +139,23 @@
             warnings: { title: "Active NWS Warning Feeds", body: "Polling live federal telemetry arrays. Active polygon warning vectors will populate directly onto the satellite display mapping grid." }
         };
 
-        // Initialize Map Base Canvas Layouts
+        // Tab selection event swapper
+        function switchDetailTab(key) {
+            const tabs = document.querySelectorAll('.param-tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            if(window.event && window.event.target && window.event.target.classList) {
+                window.event.target.classList.add('active');
+            }
+            document.getElementById("detail-title").innerText = telemetryDetails[key].title;
+            document.getElementById("detail-body").innerText = telemetryDetails[key].body;
+        }
+
         const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([46.8772, -96.7898], 9);
         
-        // Layers: 1. Esri Terrain Imagery, 2. Dark Labels, 3. Iowa State NEXRAD Radar Feeds
-        const satelliteLayer = L.tileLayer('https://arcgisonline.com{z}/{y}/{x}', { maxZoom: 20 }).addTo(map);
-        const neonLabelsLayer = L.tileLayer('https://{s}://{z}/{x}/{y}.png', { subdomains: 'abcd', maxZoom: 20, opacity: 0.90 }).addTo(map);
-        const liveRadarLayer = L.tileLayer('https://iastate.edu{z}/{x}/{y}.png', { opacity: 0.60, transparent: true }).addTo(map);
+        // Corrected highly reliable imagery servers
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20 }).addTo(map);
+        const liveRadarLayer = L.tileLayer('https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png', { opacity: 0.60, transparent: true }).addTo(map);
+        const neonLabelsLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png', { subdomains: 'abcd', maxZoom: 20, opacity: 0.90 }).addTo(map);
 
         const layerGridMenu = {
             "<span style='color:#f43f5e; font-weight:bold;'>🛰️ SATELLITE HUD</span>": satelliteLayer,
@@ -151,40 +172,25 @@
         let sirenIntervalId = null;
         let cachedGeoJsonAlerts = null;
         let manualOverride = false;
-        let loggedSpotterMarkers = [];
 
-        // Tab selection event swapper
-        function switchDetailTab(key) {
-            const tabs = document.querySelectorAll('.param-tab');
-            tabs.forEach(tab => tab.classList.remove('active'));
-            if(window.event && window.event.target && window.event.target.classList) {
-                window.event.target.classList.add('active');
-            }
-            document.getElementById("detail-title").innerText = telemetryDetails[key].title;
-            document.getElementById("detail-body").innerText = telemetryDetails[key].body;
-        }
-
-        // Location search parsing engine
         function executeSectorSearch() {
             const query = document.getElementById("location-search").value.trim();
             const feedbackEl = document.getElementById("search-feedback");
             if (!query) return;
 
             feedbackEl.style.color = "#38bdf8";
-            feedbackEl.innerText = "QUERYING SYSTEM LOCATORS...";
+            feedbackEl.innerText = "QUERYING LOCATORS...";
             feedbackEl.style.display = "block";
 
-            fetch(`https://openstreetmap.org{encodeURIComponent(query)}&limit=1`, { headers: { "User-Agent": `Vortex_${Math.floor(Math.random()*9999)}` } })
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`)
                 .then(res => res.json())
                 .then(results => {
                     if (results && results.length > 0) {
-                        const searchResult = results[0];
-                        const lat = parseFloat(searchResult.lat);
-                        const lon = parseFloat(searchResult.lon);
+                        const lat = parseFloat(results[0].lat);
+                        const lon = parseFloat(results[0].lon);
                         document.getElementById("user-coords").innerText = `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
                         feedbackEl.style.display = "none";
                         map.setView([lat, lon], 9);
-                        fetchLiveMesoscaleAnalysis(lat, lon);
                         if(cachedGeoJsonAlerts) checkChaserPolygonIntersections(cachedGeoJsonAlerts, lat, lon);
                     } else {
                         feedbackEl.style.color = "#ef4444";
@@ -192,53 +198,140 @@
                     }
                 })
                 .catch(() => { 
-                    feedbackEl.style.color = "#eab308"; 
-                    feedbackEl.innerText = "FALLBACK ROUTING..."; 
-                    setTimeout(() => {
-                        feedbackEl.style.display = "none";
-                        let fallbackLat = 35.22, fallbackLon = -97.44; 
-                        if(query.toLowerCase().includes("fargo")) { fallbackLat = 46.87; fallbackLon = -96.78; }
-                        document.getElementById("user-coords").innerText = `${fallbackLat}°, ${fallbackLon}°`;
-                        map.setView([fallbackLat, fallbackLon], 9);
-                        fetchLiveMesoscaleAnalysis(fallbackLat, fallbackLon);
-                    }, 800);
+                    feedbackEl.style.color = "#ef4444"; 
+                    feedbackEl.innerText = "FALLBACK ROUTING ERROR"; 
                 });
         }
 
-        function fetchLiveMesoscaleAnalysis(lat, lon) {
-            fetch(`https://weather.gov{lat},${lon}`)
-                .then(res => res.json())
-                .then(pointData => {
-                    const radarStation = pointData.properties.radarStation;
-                    document.getElementById("chase-mode-btn").innerText = `ACTIVATE FIELD CHASE MODE [${radarStation}]`;
-                    document.getElementById("storm-cape").innerText = "1,850 J/kg"; 
-                    document.getElementById("storm-shear").innerText = "38 kts";
-                })
-                .catch(() => {
-                    document.getElementById("storm-cape").innerText = "2,100 J/kg";
-                    document.getElementById("storm-shear").innerText = "41 kts";
-                });
+        function triggerSirenManualOverride() {
+            manualOverride = true;
+            document.getElementById("siren-armed").checked = true;
+            triggerHardwareSiren();
+            setTimeout(() => {
+                stopHardwareSiren();
+                manualOverride = false;
+            }, 3000);
         }
 
-        // 100% REAL LIVE NWS DATA INGESTION: Fetches Warning Polygons, Hail sizes, and Wind speeds
+        function triggerHardwareSiren() {
+            if (!document.getElementById("siren-armed").checked) return;
+            stopHardwareSiren();
+            if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            console.warn("⚠️ [VORTEX AUDIO] CORE GEOFENCE COMPROMISED. TRIGGERING HAZARD SIREN TONES.");
+
+            sirenIntervalId = setInterval(() => {
+                if (!audioContext) return;
+                let osc1 = audioContext.createOscillator();
+                let osc2 = audioContext.createOscillator();
+                let gainNode = audioContext.createGain();
+
+                osc1.type = 'sawtooth'; 
+                osc2.type = 'sine';
+                osc1.frequency.setValueAtTime(850, audioContext.currentTime);
+                osc2.frequency.setValueAtTime(660, audioContext.currentTime);
+
+                gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.4);
+
+                osc1.connect(gainNode);
+                osc2.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                osc1.start();
+                osc2.start();
+                osc1.stop(audioContext.currentTime + 0.4);
+                osc2.stop(audioContext.currentTime + 0.4);
+            }, 600);
+        }
+
+        function stopHardwareSiren() {
+            if (sirenIntervalId) {
+                clearInterval(sirenIntervalId);
+                sirenIntervalId = null;
+            }
+        }
+
+        function isPointInPolygon(point, polygon) {
+            const x = point[0], y = point[1];
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i][0], yi = polygon[i][1];
+                const xj = polygon[j][0], yj = polygon[j][1];
+                const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+
+        function checkChaserPolygonIntersections(geoJsonData, chaserLat, chaserLon) {
+            let insideWarning = false;
+            if (!geoJsonData || !geoJsonData.features) return;
+
+            geoJsonData.features.forEach(feature => {
+                if (feature.properties.event !== "Tornado Warning") return;
+                const geom = feature.geometry;
+                if (geom.type === "Polygon") {
+                    if (isPointInPolygon([chaserLon, chaserLat], geom.coordinates[0])) insideWarning = true;
+                } else if (geom.type === "MultiPolygon") {
+                    geom.coordinates.forEach(poly => {
+                        if (isPointInPolygon([chaserLon, chaserLat], poly[0])) insideWarning = true;
+                    });
+                }
+            });
+
+            if (insideWarning) {
+                triggerHardwareSiren();
+            } else if (!manualOverride) {
+                stopHardwareSiren();
+            }
+        }
+
+        function toggleChaseMode() {
+            chaseModeActive = !chaseModeActive;
+            const btn = document.getElementById("chase-mode-btn");
+            const metricsDiv = document.getElementById("chase-metrics");
+
+            if (chaseModeActive) {
+                btn.style.background = "#dc2626";
+                btn.style.color = "#fff";
+                btn.innerText = "❌ TERMINATE CHASE MODE";
+                metricsDiv.style.display = "block";
+                
+                if (navigator.geolocation) {
+                    chaserGpsWatchId = navigator.geolocation.watchPosition(
+                        pos => {
+                            const lat = pos.coords.latitude;
+                            const lon = pos.coords.longitude;
+                            document.getElementById("chaser-gps").innerText = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                            map.setView([lat, lon], 11);
+                            if(cachedGeoJsonAlerts) checkChaserPolygonIntersections(cachedGeoJsonAlerts, lat, lon);
+                        },
+                        err => { document.getElementById("chaser-gps").innerText = "GPS BLOCKED"; },
+                        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+                    );
+                }
+            } else {
+                btn.style.background = "#1e293b";
+                btn.style.color = "#ef4444";
+                btn.innerText = "ACTIVATE FIELD CHASE MODE";
+                metricsDiv.style.display = "none";
+                if (chaserGpsWatchId) navigator.geolocation.clearWatch(chaserGpsWatchId);
+                stopHardwareSiren();
+            }
+        }
+
         function fetchLiveNWSAlertPolygons() {
-            fetch(`https://allorigins.win{encodeURIComponent("https://weather.gov")}`)
+            fetch(`https://api.weather.gov/alerts/active?area=ND`)
                 .then(res => res.json())
-                .then(wrapper => {
-                    const geoJsonData = JSON.parse(wrapper.contents);
+                .then(geoJsonData => {
                     cachedGeoJsonAlerts = geoJsonData;
-                    
                     activeWarningLayers.forEach(layer => map.removeLayer(layer));
                     activeWarningLayers = [];
                     
                     let tornadoActive = false;
-                    let destructiveHailActive = false;
-                    let destructiveWindActive = false;
-                    let extremeHailSize = 0;
-                    let extremeWindSpeed = 0;
 
                     if (!geoJsonData.features || geoJsonData.features.length === 0) {
-                        telemetryDetails.warnings.body = "No active convective threat envelopes detected inside this sector grid boundary.";
+                        document.getElementById("alert-banner").style.display = "none";
                         if (!manualOverride) stopHardwareSiren();
                         return;
                     }
@@ -254,13 +347,7 @@
                             const props = feature.properties || {};
                             const params = props.parameters || {};
 
-                            const hailNum = params.maxHailSize ? parseFloat(params.maxHailSize) : 0;
-                            const windNum = params.maxWindGust ? parseFloat(params.maxWindGust) : 0;
-
-                            if (hailNum >= 2.0) { destructiveHailActive = true; if(hailNum > extremeHailSize) extremeHailSize = hailNum; }
-                            if (windNum >= 70) { destructiveWindActive = true; if(windNum > extremeWindSpeed) extremeWindSpeed = windNum; }
-
-                            const maxHail = params.maxHailSize ? `${params.maxHailSize} INCH` : "N/A";
+                            const maxHail = params.maxHailSize ? `${params.maxHailSize} IN` : "N/A";
                             const maxWind = params.maxWindGust ? `${params.maxWindGust} MPH` : "N/A";
                             const torThreat = params.tornadoThreat ? `${params.tornadoThreat}` : "RADAR INDICATED";
 
@@ -269,3 +356,27 @@
                                     <strong style="color:#f43f5e; font-size:0.9rem;">⚠️ ${props.event}</strong>
                                     <hr style="border:0; border-top:1px solid rgba(244,63,94,0.4); margin:6px 0;">
                                     <div class="metric"><span>🔮 TORNADO:</span><span style="color:#ef4444;font-weight:bold;">${torThreat}</span></div>
+                                    <div class="metric"><span>☄️ MAX HAIL:</span><span style="color:#eab308;font-weight:bold;">${maxHail}</span></div>
+                                    <div class="metric"><span>💨 MAX WIND:</span><span style="color:#a855f7;font-weight:bold;">${maxWind}</span></div>
+                                </div>`;
+                            layer.bindPopup(popupLayout);
+                        }
+                    }).addTo(map);
+
+                    document.getElementById("alert-banner").style.display = tornadoActive ? "block" : "none";
+                    
+                    if (chaseModeActive && navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(pos => {
+                            checkChaserPolygonIntersections(geoJsonData, pos.coords.latitude, pos.coords.longitude);
+                        });
+                    }
+                })
+                .catch(err => console.error("NWS pipeline err:", err));
+        }
+
+        // Setup polling
+        fetchLiveNWSAlertPolygons();
+        setInterval(fetchLiveNWSAlertPolygons, 120000); // 2 min polling
+    </script>
+</body>
+</html>
